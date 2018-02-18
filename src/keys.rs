@@ -417,3 +417,22 @@ pub fn keypair_from_seed_ed25519(seed: &sign::Seed) -> (PublicKey, SecretKey) {
     let (pk, sk) = sign::keypair_from_seed(seed);
     (PublicKey::from(pk), SecretKey::from(sk))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ed25519() {
+        let (pk, sk) = gen_keypair_ed25519();
+        assert!(pk.matches_secret_key(&sk));
+
+        let plain_text = [0u8, 1, 2, 3, 4, 5, 6, 7];
+
+        let signed_text = sk.sign(&plain_text);
+        assert_eq!(&pk.verify(&signed_text).unwrap()[..], &plain_text[..]);
+
+        let detached_sig = sk.sign_detached(&plain_text);
+        assert!(pk.verify_detached(&detached_sig, &plain_text));
+    }
+}
