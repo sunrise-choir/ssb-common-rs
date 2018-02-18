@@ -1,5 +1,6 @@
 //! Common types and data for the ssb ecosystem
 #![deny(missing_docs)]
+#![feature(try_from)]
 
 extern crate sodiumoxide;
 

@@ -10,7 +10,7 @@
 //! `MultiPublicKeyBuf` (owned) and `MultiSecretKey` (reference) are string
 //! encodings that include a suffix indicating the cryptographic primitive.
 
-use std::convert::From;
+use std::convert::{From, TryInto};
 use std::ops::{Index, Range, RangeTo, RangeFrom, RangeFull};
 
 use sodiumoxide::crypto::sign;
@@ -83,6 +83,17 @@ impl PublicKey {
         }
     }
 
+    /// Return whether this `PublicKey` uses a cryptographic primitive that is
+    /// currently considered secure.
+    ///
+    /// The return value of this method may change as new versions of this
+    /// module are released.
+    pub fn is_considered_secure(&self) -> bool {
+        match *self {
+            PublicKey::Ed25519(_) => true,
+        }
+    }
+
     /// Return whether this `PublicKey` uses the same cryptographic primitive as
     /// the given `SecretKey`.
     pub fn matches_secret_key(&self, secret_key: &SecretKey) -> bool {
@@ -103,6 +114,17 @@ impl PublicKey {
 impl From<sign::PublicKey> for PublicKey {
     fn from(ed25519_pk: sign::PublicKey) -> PublicKey {
         PublicKey::Ed25519(ed25519_pk)
+    }
+}
+
+impl TryInto<sign::PublicKey> for PublicKey {
+    /// Fails if the underlying cryptographic primitive is not ed25519.
+    type Error = ();
+
+    fn try_into(self) -> Result<sign::PublicKey, Self::Error> {
+        match self {
+            PublicKey::Ed25519(pk) => Ok(pk),
+        }
     }
 }
 
@@ -197,11 +219,33 @@ impl SecretKey {
             SecretKey::Ed25519(_) => true,
         }
     }
+
+    /// Return whether this `SecretKey` uses a cryptographic primitive that is
+    /// currently considered secure.
+    ///
+    /// The return value of this method may change as new versions of this
+    /// module are released.
+    pub fn is_considered_secure(&self) -> bool {
+        match *self {
+            SecretKey::Ed25519(_) => true,
+        }
+    }
 }
 
 impl From<sign::SecretKey> for SecretKey {
     fn from(ed25519_sk: sign::SecretKey) -> SecretKey {
         SecretKey::Ed25519(ed25519_sk)
+    }
+}
+
+impl TryInto<sign::SecretKey> for SecretKey {
+    /// Fails if the underlying cryptographic primitive is not ed25519.
+    type Error = ();
+
+    fn try_into(self) -> Result<sign::SecretKey, Self::Error> {
+        match self {
+            SecretKey::Ed25519(sk) => Ok(sk),
+        }
     }
 }
 
@@ -268,11 +312,33 @@ impl Signature {
             Signature::Ed25519(_) => true,
         }
     }
+
+    /// Return whether this `Signature` uses a cryptographic primitive that is
+    /// currently considered secure.
+    ///
+    /// The return value of this method may change as new versions of this
+    /// module are released.
+    pub fn is_considered_secure(&self) -> bool {
+        match *self {
+            Signature::Ed25519(_) => true,
+        }
+    }
 }
 
 impl From<sign::Signature> for Signature {
     fn from(ed25519_sig: sign::Signature) -> Signature {
         Signature::Ed25519(ed25519_sig)
+    }
+}
+
+impl TryInto<sign::Signature> for Signature {
+    /// Fails if the underlying cryptographic primitive is not ed25519.
+    type Error = ();
+
+    fn try_into(self) -> Result<sign::Signature, Self::Error> {
+        match self {
+            Signature::Ed25519(sig) => Ok(sig),
+        }
     }
 }
 
