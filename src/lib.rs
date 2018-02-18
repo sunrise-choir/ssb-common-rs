@@ -4,6 +4,7 @@
 
 extern crate sodiumoxide;
 
+// TODO move the directory stuff into a module, and mke the consts public
 /// The network identifier of the main ssb network.
 const MAINNET_IDENTIFIER: [u8; 32] = [212, 161, 203, 136, 166, 111, 2, 248, 219, 99, 92, 226, 100,
                                       65, 204, 93, 172, 27, 8, 66, 12, 234, 172, 35, 8, 57, 183,
