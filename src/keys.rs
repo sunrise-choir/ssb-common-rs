@@ -1,14 +1,21 @@
-//! TODO update description once you figured out how to represent stuff in types
-//! - as of now, only one primitive (ed25519)
+//! Operations for dealing with the public and secret keys used in ssb.
 //!
-//! Operations for dealing with the public and secret keys used by ssb. This
-//! mostly deals with their representation in base64 and with a suffix
-//! indicating the cryptographic primitive.
+//! The `PublicKey`, `SecretKey` and `Signature` types abstract over the
+//! (potentially multiple) cryptographic primitives supported by ssb. These
+//! types should be used when dealing with keys in application logic.
 //!
-//! `Base64PublicKeyBuf` (owned) and `Base64PrivateKey` (reference) represent
-//! strings which are valid base64 encodings of ssb keys.
-//! `MultiPublicKeyBuf` (owned) and `MultiSecretKey` (reference) are string
-//! encodings that include a suffix indicating the cryptographic primitive.
+//! Aside from providing these types, this module also implements the encoding
+//! used in ssb to store and transmit keys.
+//!
+//! `PublicKeyEncodingBuf` (owned), `PublicKeyEncoding` (reference),
+//! `SecretKeyEncodingBuf` (owned) and `SecretKeyEncoding` (reference) are
+//! typesafe wrappers around `Strings` and `&str`s that always hold valid
+//! encodings of ssb keys.
+//!
+//! When given strings which are expected to encode keys, the `FromStr` impls of
+//! `PublicKey` and `SecretKey` should be used for decoding. Encodings should be
+//! created via the `new` functions of `PublicKeyEnodingBuf` and
+//! `SecretKeyEncodingBuf`.
 
 use std::convert::{From, TryInto, TryFrom};
 use std::str::FromStr;
@@ -23,9 +30,6 @@ use regex::{Regex, RegexBuilder};
 
 /// An ssb public key. This type abstracts over the fact that ssb can support
 /// multiple cryptographic primitives.
-///
-/// New instances can be either created via a `From` implementation, or through
-/// one of the parsing functions. // TODO are there multiple? What about key generation functions?
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum PublicKey {
     /// An [Ed25519](http://ed25519.cr.yp.to/) public key, as used by
@@ -229,10 +233,7 @@ impl FromStr for PublicKey {
 /// An ssb secret key. This type abstracts over the fact that ssb can support
 /// multiple cryptographic primitives.
 ///
-/// When a `SecretKey` goes out of scope its contents will be zeroed out.
-///
-/// New instances can be either created via a `From` implementation, or through
-/// one of the parsing functions. // TODO are there multiple? What about key generation functions?
+/// When a `SecretKey` goes out of scope its contents are zeroed out.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum SecretKey {
     /// An [Ed25519](http://ed25519.cr.yp.to/) secret key, as used by
@@ -548,18 +549,12 @@ pub fn encodes_secret_key(enc: &str) -> bool {
 pub struct PublicKeyEncodingBuf(String);
 
 impl PublicKeyEncodingBuf {
-    /// Convert into a `PublicKeyEncoding` (which behaves like a reference).
-    pub fn to_public_key_encoding(&self) -> PublicKeyEncoding {
-        PublicKeyEncoding(&self.0)
-    }
-}
-
-impl From<PublicKey> for PublicKeyEncodingBuf {
-    fn from(pk: PublicKey) -> PublicKeyEncodingBuf {
-        match pk {
-            PublicKey::Ed25519(bytes) => {
+    /// Create a new `PublicKeyEncodingBuf`, encoding the given `PublicKey`.
+    fn new(pk: &PublicKey) -> PublicKeyEncodingBuf {
+        match *pk {
+            PublicKey::Ed25519(ref bytes) => {
                 let mut buf = String::with_capacity(SSB_PK_ED25519_ENCODED_LEN);
-                encode_config_buf(&bytes, STANDARD, &mut buf);
+                encode_config_buf(bytes, STANDARD, &mut buf);
                 debug_assert!(buf.len() == ED25519_PK_BASE64_LEN);
 
                 buf.push_str(ED25519_SUFFIX);
@@ -568,6 +563,17 @@ impl From<PublicKey> for PublicKeyEncodingBuf {
                 PublicKeyEncodingBuf(buf)
             }
         }
+    }
+
+    /// Convert into a `PublicKeyEncoding` (which behaves like a reference).
+    pub fn to_public_key_encoding(&self) -> PublicKeyEncoding {
+        PublicKeyEncoding(&self.0)
+    }
+}
+
+impl From<PublicKey> for PublicKeyEncodingBuf {
+    fn from(pk: PublicKey) -> PublicKeyEncodingBuf {
+        PublicKeyEncodingBuf::new(&pk)
     }
 }
 
@@ -638,6 +644,22 @@ impl<'a> TryFrom<&'a str> for PublicKeyEncoding<'a> {
 pub struct SecretKeyEncodingBuf(String);
 
 impl SecretKeyEncodingBuf {
+    /// Create a new `PublicKeyEncodingBuf`, encoding the given `PublicKey`.
+    pub fn new(sk: &SecretKey) -> SecretKeyEncodingBuf {
+        match *sk {
+            SecretKey::Ed25519(ref bytes) => {
+                let mut buf = String::with_capacity(SSB_SK_ED25519_ENCODED_LEN);
+                encode_config_buf(&bytes[..], STANDARD, &mut buf);
+                debug_assert!(buf.len() == ED25519_SK_BASE64_LEN);
+
+                buf.push_str(ED25519_SUFFIX);
+                debug_assert!(buf.len() == SSB_SK_ED25519_ENCODED_LEN);
+
+                SecretKeyEncodingBuf(buf)
+            }
+        }
+    }
+
     /// Convert into a `SecretKeyEncoding` (which behaves like a reference).
     pub fn to_secret_key_encoding(&self) -> SecretKeyEncoding {
         SecretKeyEncoding(&self.0)
@@ -659,18 +681,7 @@ impl Drop for SecretKeyEncodingBuf {
 
 impl From<SecretKey> for SecretKeyEncodingBuf {
     fn from(sk: SecretKey) -> SecretKeyEncodingBuf {
-        match sk {
-            SecretKey::Ed25519(bytes) => {
-                let mut buf = String::with_capacity(SSB_SK_ED25519_ENCODED_LEN);
-                encode_config_buf(&bytes[..], STANDARD, &mut buf);
-                debug_assert!(buf.len() == ED25519_SK_BASE64_LEN);
-
-                buf.push_str(ED25519_SUFFIX);
-                debug_assert!(buf.len() == SSB_SK_ED25519_ENCODED_LEN);
-
-                SecretKeyEncodingBuf(buf)
-            }
-        }
+        SecretKeyEncodingBuf::new(&sk)
     }
 }
 
