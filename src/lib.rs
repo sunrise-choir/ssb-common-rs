@@ -3,6 +3,10 @@
 #![feature(try_from)]
 
 extern crate sodiumoxide;
+extern crate base64;
+extern crate regex;
+#[macro_use]
+extern crate lazy_static;
 
 // TODO move the directory stuff into a module, and mke the consts public
 /// The network identifier of the main ssb network.

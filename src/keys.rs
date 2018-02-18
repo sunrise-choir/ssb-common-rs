@@ -10,10 +10,14 @@
 //! `MultiPublicKeyBuf` (owned) and `MultiSecretKey` (reference) are string
 //! encodings that include a suffix indicating the cryptographic primitive.
 
-use std::convert::{From, TryInto};
+use std::convert::{From, TryInto, TryFrom};
+use std::str::FromStr;
+use std::borrow::ToOwned;
 use std::ops::{Index, Range, RangeTo, RangeFrom, RangeFull};
 
 use sodiumoxide::crypto::sign;
+use base64::{encode_config_buf, decode_config_slice, DecodeError, STANDARD};
+use regex::{Regex, RegexBuilder};
 
 /// An ssb public key. This type abstracts over the fact that ssb can support
 /// multiple cryptographic primitives.
@@ -109,6 +113,24 @@ impl PublicKey {
             PublicKey::Ed25519(_) => signature.is_ed25519(),
         }
     }
+
+    /// Create a `PublicKey` from a `PublicKeyEncoding`.
+    ///
+    /// Prefer to directly use the `FromStr` impl.
+    pub fn from_encoding(enc: &PublicKeyEncoding) -> PublicKey {
+        if enc.0.ends_with(ED25519_SUFFIX) {
+            let mut bytes = [0u8; sign::PUBLICKEYBYTES];
+
+            match decode_config_slice(&enc.0[..ED25519_PK_BASE64_LEN], STANDARD, &mut bytes) {
+                Ok(len) => debug_assert!(len == sign::PUBLICKEYBYTES),
+                Err(_) => unreachable!(),
+            }
+
+            PublicKey::Ed25519(sign::PublicKey(bytes))
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 impl From<sign::PublicKey> for PublicKey {
@@ -176,6 +198,32 @@ impl Index<RangeFull> for PublicKey {
     }
 }
 
+impl From<PublicKeyEncodingBuf> for PublicKey {
+    fn from(enc: PublicKeyEncodingBuf) -> PublicKey {
+        PublicKey::from_encoding(&enc.to_public_key_encoding())
+    }
+}
+
+/// This can be used to parse an encoded `PublicKey`.
+impl FromStr for PublicKey {
+    /// Fails if the given string does not contain an encoding of a `PublicKey`.
+    type Err = ();
+
+    fn from_str(enc: &str) -> Result<PublicKey, ()> {
+        if !encodes_public_key(enc) {
+            Err(())
+        } else {
+            let mut buf = [0; sign::PUBLICKEYBYTES];
+
+            match decode_config_slice(&enc[..ED25519_PK_BASE64_LEN], STANDARD, &mut buf) {
+                Ok(_) => Ok(PublicKey::Ed25519(sign::PublicKey(buf))),
+                Err(_) => Err(()),
+            }
+        }
+
+    }
+}
+
 /// An ssb secret key. This type abstracts over the fact that ssb can support
 /// multiple cryptographic primitives.
 ///
@@ -228,6 +276,24 @@ impl SecretKey {
     pub fn is_considered_secure(&self) -> bool {
         match *self {
             SecretKey::Ed25519(_) => true,
+        }
+    }
+
+    /// Create a `SecretKey` from a `SecretKeyEncoding`.
+    ///
+    /// Prefer to directly use the `FromStr` impl.
+    pub fn from_encoding(enc: &SecretKeyEncoding) -> SecretKey {
+        if enc.0.ends_with(ED25519_SUFFIX) {
+            let mut bytes = [0u8; sign::SECRETKEYBYTES];
+
+            match decode_config_slice(&enc.0[..ED25519_SK_BASE64_LEN], STANDARD, &mut bytes) {
+                Ok(len) => debug_assert!(len == sign::SECRETKEYBYTES),
+                Err(_) => unreachable!(),
+            }
+
+            SecretKey::Ed25519(sign::SecretKey(bytes))
+        } else {
+            unreachable!()
         }
     }
 }
@@ -286,6 +352,32 @@ impl Index<RangeFull> for SecretKey {
         match *self {
             SecretKey::Ed25519(ref sk) => sk.index(_index),
         }
+    }
+}
+
+impl From<SecretKeyEncodingBuf> for SecretKey {
+    fn from(enc: SecretKeyEncodingBuf) -> SecretKey {
+        SecretKey::from_encoding(&enc.to_secret_key_encoding())
+    }
+}
+
+/// This can be used to parse an encoded `SecretKey`.
+impl FromStr for SecretKey {
+    /// Fails if the given string does not contain an encoding of a `SecretKey`.
+    type Err = ();
+
+    fn from_str(enc: &str) -> Result<SecretKey, ()> {
+        if !encodes_secret_key(enc) {
+            Err(())
+        } else {
+            let mut buf = [0; sign::SECRETKEYBYTES];
+
+            match decode_config_slice(&enc[..ED25519_SK_BASE64_LEN], STANDARD, &mut buf) {
+                Ok(_) => Ok(SecretKey::Ed25519(sign::SecretKey(buf))),
+                Err(_) => Err(()),
+            }
+        }
+
     }
 }
 
@@ -418,6 +510,201 @@ pub fn keypair_from_seed_ed25519(seed: &sign::Seed) -> (PublicKey, SecretKey) {
     (PublicKey::from(pk), SecretKey::from(sk))
 }
 
+/// The suffix indicating the ed25519 cryptographic primitive.
+const ED25519_SUFFIX: &'static str = ".ed25519";
+/// Length of a base64 encoded ed25519 public key.
+const ED25519_PK_BASE64_LEN: usize = 44;
+/// Length of an encoded ssb `PublicKey` which uses the ed25519 cryptographic primitive.
+const SSB_PK_ED25519_ENCODED_LEN: usize = ED25519_PK_BASE64_LEN + 8;
+/// Length of a base64 encoded ed25519 secret key.
+const ED25519_SK_BASE64_LEN: usize = 88;
+/// Length of an encoded ssb `SecretKey` which uses the ed25519 cryptographic primitive.
+const SSB_SK_ED25519_ENCODED_LEN: usize = ED25519_SK_BASE64_LEN + 8;
+
+lazy_static! {
+    static ref PUBLIC_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{43}=\.ed25519$").dot_matches_new_line(true).build().unwrap();
+    
+    static ref SECRET_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{86}==\.ed25519$").dot_matches_new_line(true).build().unwrap();
+}
+
+/// Check whether a given string is the encoding of a `PublicKey`.
+pub fn encodes_public_key(enc: &str) -> bool {
+    PUBLIC_KEY_RE.is_match(enc)
+}
+
+/// Check whether a given string is the encoding of a `SecretKey`.
+pub fn encodes_secret_key(enc: &str) -> bool {
+    SECRET_KEY_RE.is_match(enc)
+}
+
+/// An owned utf8-encoding of a `PublicKey`.
+///
+/// This is a thin wrapper around `String`: Every `PublicKeyEncodingBuf` is also
+/// a string (so the conversion is zero-cost), but not every `String` is the
+/// encoding of a `PublicKey`.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct PublicKeyEncodingBuf(String);
+
+impl PublicKeyEncodingBuf {
+    /// Convert into a `PublicKeyEncoding` (which behaves like a reference).
+    pub fn to_public_key_encoding(&self) -> PublicKeyEncoding {
+        PublicKeyEncoding(&self.0)
+    }
+}
+
+impl From<PublicKey> for PublicKeyEncodingBuf {
+    fn from(pk: PublicKey) -> PublicKeyEncodingBuf {
+        match pk {
+            PublicKey::Ed25519(bytes) => {
+                let mut buf = String::with_capacity(SSB_PK_ED25519_ENCODED_LEN);
+                encode_config_buf(&bytes, STANDARD, &mut buf);
+                debug_assert!(buf.len() == ED25519_PK_BASE64_LEN);
+
+                buf.push_str(ED25519_SUFFIX);
+                debug_assert!(buf.len() == SSB_PK_ED25519_ENCODED_LEN);
+
+                PublicKeyEncodingBuf(buf)
+            }
+        }
+    }
+}
+
+/// Convert into a `String` (zero-cost operation).
+impl Into<String> for PublicKeyEncodingBuf {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl TryFrom<String> for PublicKeyEncodingBuf {
+    type Error = ();
+    fn try_from(enc: String) -> Result<Self, Self::Error> {
+        if encodes_public_key(&enc) {
+            Ok(PublicKeyEncodingBuf(enc))
+        } else {
+            Err(())
+        }
+    }
+}
+
+/// A reference to a utf8-encoding of a `PublicKey`.
+///
+/// This is a thin wrapper around `str`: Every `PublicKeyEncoding` is also
+/// an str (so the conversion is zero-cost), but not every `str` is the
+/// encoding of a `PublicKey`.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct PublicKeyEncoding<'a>(&'a str);
+
+impl<'a> PublicKeyEncoding<'a> {
+    /// Convert into an owned `PublicKeyEncodingBuf`.
+    pub fn to_public_key_encoding_buf(&self) -> PublicKeyEncodingBuf {
+        PublicKeyEncodingBuf(self.0.to_owned())
+    }
+}
+
+/// Use this `PublicKeyEnconding` as an `str` reference (zero-cost operation).
+impl<'a> AsRef<str> for PublicKeyEncoding<'a> {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'a> TryFrom<&'a str> for PublicKeyEncoding<'a> {
+    type Error = ();
+    fn try_from(enc: &'a str) -> Result<Self, Self::Error> {
+        if encodes_public_key(enc) {
+            Ok(PublicKeyEncoding(enc))
+        } else {
+            Err(())
+        }
+    }
+}
+
+// TODO zero on drop, star out Debug
+/// An owned utf8-encoding of a `SecretKey`.
+///
+/// This is a thin wrapper around `String`: Every `SecretKeyEncodingBuf` is also
+/// a string (so the conversion is zero-cost), but not every `String` is the
+/// encoding of a `SecretKey`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SecretKeyEncodingBuf(String);
+
+impl SecretKeyEncodingBuf {
+    /// Convert into a `SecretKeyEncoding` (which behaves like a reference).
+    pub fn to_secret_key_encoding(&self) -> SecretKeyEncoding {
+        SecretKeyEncoding(&self.0)
+    }
+}
+
+impl From<SecretKey> for SecretKeyEncodingBuf {
+    fn from(sk: SecretKey) -> SecretKeyEncodingBuf {
+        match sk {
+            SecretKey::Ed25519(bytes) => {
+                let mut buf = String::with_capacity(SSB_SK_ED25519_ENCODED_LEN);
+                encode_config_buf(&bytes[..], STANDARD, &mut buf);
+                debug_assert!(buf.len() == ED25519_SK_BASE64_LEN);
+
+                buf.push_str(ED25519_SUFFIX);
+                debug_assert!(buf.len() == SSB_SK_ED25519_ENCODED_LEN);
+
+                SecretKeyEncodingBuf(buf)
+            }
+        }
+    }
+}
+
+/// Convert into a `String` (zero-cost operation).
+impl Into<String> for SecretKeyEncodingBuf {
+    fn into(self) -> String {
+        self.0
+    }
+}
+
+impl TryFrom<String> for SecretKeyEncodingBuf {
+    type Error = ();
+    fn try_from(enc: String) -> Result<Self, Self::Error> {
+        if encodes_secret_key(&enc) {
+            Ok(SecretKeyEncodingBuf(enc))
+        } else {
+            Err(())
+        }
+    }
+}
+
+// TODO debug hidden output
+/// A reference to a utf8-encoding of a `SecretKey`.
+///
+/// This is a thin wrapper around `str`: Every `SecretKeyEncoding` is also
+/// an str (so the conversion is zero-cost), but not every `str` is the
+/// encoding of a `SecretKey`.
+#[derive(PartialEq, Eq)]
+pub struct SecretKeyEncoding<'a>(&'a str);
+
+impl<'a> SecretKeyEncoding<'a> {
+    /// Convert into an owned `SecretKeyEncodingBuf`.
+    pub fn to_secret_key_encoding_buf(&self) -> SecretKeyEncodingBuf {
+        SecretKeyEncodingBuf(self.0.to_owned())
+    }
+}
+
+/// Use this `SecretKeyEnconding` as an `str` reference (zero-cost operation).
+impl<'a> AsRef<str> for SecretKeyEncoding<'a> {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'a> TryFrom<&'a str> for SecretKeyEncoding<'a> {
+    type Error = ();
+    fn try_from(enc: &'a str) -> Result<Self, Self::Error> {
+        if encodes_secret_key(enc) {
+            Ok(SecretKeyEncoding(enc))
+        } else {
+            Err(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,5 +721,109 @@ mod tests {
 
         let detached_sig = sk.sign_detached(&plain_text);
         assert!(pk.verify_detached(&detached_sig, &plain_text));
+    }
+
+    #[test]
+    fn test_encodes_public_key() {
+        assert!(encodes_public_key("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"));
+        // too short
+        assert!(!encodes_public_key("urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"));
+        // too long
+        assert!(!encodes_public_key("azurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"));
+        // invalid character
+        assert!(!encodes_public_key("-urF8X68ArfRM71dFmKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"));
+        // very invalid character
+        assert!(!encodes_public_key("💖8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"));
+        // incorrect suffix
+        assert!(!encodes_public_key("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25518"));
+        // no trailing =
+        assert!(!encodes_public_key("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hAf.ed25518"));
+    }
+
+    #[test]
+    fn test_encodes_secret_key() {
+        assert!(encodes_secret_key("KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"));
+        // too short
+        assert!(!encodes_secret_key("ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"));
+        // too long
+        assert!(!encodes_secret_key("aKISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"));
+        // invalid character
+        assert!(!encodes_secret_key("-ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"));
+        // very invalid character
+        assert!(!encodes_secret_key("💖ctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"));
+        // incorrect suffix
+        assert!(!encodes_secret_key("aKISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25518"));
+        // no trailing ==
+        assert!(!encodes_secret_key("aKISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQf=.ed25519"));
+    }
+
+    #[test]
+    fn encoding_ed25519() {
+        let (pk, sk) = gen_keypair_ed25519();
+        let pk_enc = PublicKeyEncodingBuf::from(pk.clone());
+        let sk_enc = SecretKeyEncodingBuf::from(sk.clone());
+
+        assert_eq!(PublicKey::from(pk_enc.clone()), pk);
+        assert_eq!(SecretKey::from(sk_enc.clone()), sk);
+
+        let parsed_pk = "zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
+            .parse::<PublicKey>()
+            .unwrap();
+        assert!(parsed_pk.is_ed25519());
+
+        // too short
+        assert!("urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
+                    .parse::<PublicKey>()
+                    .is_err());
+        // too long
+        assert!("azurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
+                    .parse::<PublicKey>()
+                    .is_err());
+        // invalid character
+        assert!("-urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
+                    .parse::<PublicKey>()
+                    .is_err());
+        // very invalid character
+        assert!("💖8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
+                    .parse::<PublicKey>()
+                    .is_err());
+        // invalid suffix
+        assert!("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25518"
+                    .parse::<PublicKey>()
+                    .is_err());
+        // no trailing =
+        assert!("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hAf.ed25519"
+                    .parse::<PublicKey>()
+                    .is_err());
+
+        let parsed_sk = "KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
+            .parse::<SecretKey>()
+            .unwrap();
+        assert!(parsed_sk.is_ed25519());
+
+        // too short
+        assert!("ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
+                    .parse::<SecretKey>()
+                    .is_err());
+        // too long
+        assert!("aKISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
+                    .parse::<SecretKey>()
+                    .is_err());
+        // invalid character
+        assert!("-ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
+                    .parse::<SecretKey>()
+                    .is_err());
+        // very invalid character
+        assert!("💖ctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
+                    .parse::<SecretKey>()
+                    .is_err());
+        // invalid suffix
+        assert!("KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25518"
+                    .parse::<SecretKey>()
+                    .is_err());
+        // no trailing ==
+        assert!("KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQf=.ed25519"
+                    .parse::<SecretKey>()
+                    .is_err());
     }
 }
