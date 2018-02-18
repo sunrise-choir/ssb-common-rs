@@ -14,9 +14,11 @@ use std::convert::{From, TryInto, TryFrom};
 use std::str::FromStr;
 use std::borrow::ToOwned;
 use std::ops::{Index, Range, RangeTo, RangeFrom, RangeFull};
+use std::fmt;
 
 use sodiumoxide::crypto::sign;
-use base64::{encode_config_buf, decode_config_slice, DecodeError, STANDARD};
+use sodiumoxide::utils::memzero;
+use base64::{encode_config_buf, decode_config_slice, STANDARD};
 use regex::{Regex, RegexBuilder};
 
 /// An ssb public key. This type abstracts over the fact that ssb can support
@@ -576,6 +578,13 @@ impl Into<String> for PublicKeyEncodingBuf {
     }
 }
 
+/// Use this `PublicKeyEncondingBuf` as an `str` reference (zero-cost operation).
+impl AsRef<str> for PublicKeyEncodingBuf {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 impl TryFrom<String> for PublicKeyEncodingBuf {
     type Error = ();
     fn try_from(enc: String) -> Result<Self, Self::Error> {
@@ -620,7 +629,6 @@ impl<'a> TryFrom<&'a str> for PublicKeyEncoding<'a> {
     }
 }
 
-// TODO zero on drop, star out Debug
 /// An owned utf8-encoding of a `SecretKey`.
 ///
 /// This is a thin wrapper around `String`: Every `SecretKeyEncodingBuf` is also
@@ -633,6 +641,19 @@ impl SecretKeyEncodingBuf {
     /// Convert into a `SecretKeyEncoding` (which behaves like a reference).
     pub fn to_secret_key_encoding(&self) -> SecretKeyEncoding {
         SecretKeyEncoding(&self.0)
+    }
+}
+
+impl fmt::Debug for SecretKeyEncodingBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SecretKeyEncodingBuf(\"****.ed25519\")")
+    }
+}
+
+impl Drop for SecretKeyEncodingBuf {
+    /// Zero out the memory.
+    fn drop(&mut self) {
+        memzero(unsafe { self.0.as_bytes_mut() })
     }
 }
 
@@ -653,10 +674,10 @@ impl From<SecretKey> for SecretKeyEncodingBuf {
     }
 }
 
-/// Convert into a `String` (zero-cost operation).
-impl Into<String> for SecretKeyEncodingBuf {
-    fn into(self) -> String {
-        self.0
+/// Use this `SecretKeyEncondingBuf` as an `str` reference (zero-cost operation).
+impl AsRef<str> for SecretKeyEncodingBuf {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 
@@ -671,7 +692,6 @@ impl TryFrom<String> for SecretKeyEncodingBuf {
     }
 }
 
-// TODO debug hidden output
 /// A reference to a utf8-encoding of a `SecretKey`.
 ///
 /// This is a thin wrapper around `str`: Every `SecretKeyEncoding` is also
@@ -684,6 +704,12 @@ impl<'a> SecretKeyEncoding<'a> {
     /// Convert into an owned `SecretKeyEncodingBuf`.
     pub fn to_secret_key_encoding_buf(&self) -> SecretKeyEncodingBuf {
         SecretKeyEncodingBuf(self.0.to_owned())
+    }
+}
+
+impl<'a> fmt::Debug for SecretKeyEncoding<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SecretKeyEncoding(\"****.ed25519\")")
     }
 }
 
