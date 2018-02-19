@@ -7,15 +7,15 @@
 //! Aside from providing these types, this module also implements the encoding
 //! used in ssb to store and transmit keys.
 //!
-//! `PublicKeyEncodingBuf` (owned), `PublicKeyEncoding` (reference),
-//! `SecretKeyEncodingBuf` (owned) and `SecretKeyEncoding` (reference) are
+//! `PublicKeyEncBuf` (owned), `PublicKeyEnc` (reference),
+//! `SecretKeyEncBuf` (owned) and `SecretKeyEnc` (reference) are
 //! typesafe wrappers around `Strings` and `&str`s that always hold valid
 //! encodings of ssb keys.
 //!
 //! When given strings which are expected to encode keys, the `FromStr` impls of
 //! `PublicKey` and `SecretKey` should be used for decoding. Encodings should be
 //! created via the `new` functions of `PublicKeyEnodingBuf` and
-//! `SecretKeyEncodingBuf`.
+//! `SecretKeyEncBuf`.
 
 use std::convert::{From, TryInto, TryFrom};
 use std::str::FromStr;
@@ -129,10 +129,10 @@ impl PublicKey {
         }
     }
 
-    /// Create a `PublicKey` from a `PublicKeyEncoding`.
+    /// Create a `PublicKey` from a `PublicKeyEnc`.
     ///
     /// Prefer to directly use the `FromStr` impl.
-    pub fn from_encoding(enc: &PublicKeyEncoding) -> PublicKey {
+    pub fn from_encoding(enc: &PublicKeyEnc) -> PublicKey {
         if enc.0.ends_with(ED25519_SUFFIX) {
             let mut bytes = [0u8; sign::PUBLICKEYBYTES];
 
@@ -213,9 +213,9 @@ impl Index<RangeFull> for PublicKey {
     }
 }
 
-impl From<PublicKeyEncodingBuf> for PublicKey {
-    fn from(enc: PublicKeyEncodingBuf) -> PublicKey {
-        PublicKey::from_encoding(&enc.to_public_key_encoding())
+impl From<PublicKeyEncBuf> for PublicKey {
+    fn from(enc: PublicKeyEncBuf) -> PublicKey {
+        PublicKey::from_encoding(&enc.as_public_key_enc())
     }
 }
 
@@ -294,10 +294,10 @@ impl SecretKey {
         }
     }
 
-    /// Create a `SecretKey` from a `SecretKeyEncoding`.
+    /// Create a `SecretKey` from a `SecretKeyEnc`.
     ///
     /// Prefer to directly use the `FromStr` impl.
-    pub fn from_encoding(enc: &SecretKeyEncoding) -> SecretKey {
+    pub fn from_encoding(enc: &SecretKeyEnc) -> SecretKey {
         if enc.0.ends_with(ED25519_SUFFIX) {
             let mut bytes = [0u8; sign::SECRETKEYBYTES];
 
@@ -376,9 +376,9 @@ impl Index<RangeFull> for SecretKey {
     }
 }
 
-impl From<SecretKeyEncodingBuf> for SecretKey {
-    fn from(enc: SecretKeyEncodingBuf) -> SecretKey {
-        SecretKey::from_encoding(&enc.to_secret_key_encoding())
+impl From<SecretKeyEncBuf> for SecretKey {
+    fn from(enc: SecretKeyEncBuf) -> SecretKey {
+        SecretKey::from_encoding(&enc.as_secret_key_enc())
     }
 }
 
@@ -569,15 +569,15 @@ pub fn encodes_secret_key(enc: &str) -> bool {
 
 /// An owned utf8-encoding of a `PublicKey`.
 ///
-/// This is a thin wrapper around `String`: Every `PublicKeyEncodingBuf` is also
+/// This is a thin wrapper around `String`: Every `PublicKeyEncBuf` is also
 /// a string (so the conversion is zero-cost), but not every `String` is the
 /// encoding of a `PublicKey`.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct PublicKeyEncodingBuf(String);
+pub struct PublicKeyEncBuf(String);
 
-impl PublicKeyEncodingBuf {
-    /// Create a new `PublicKeyEncodingBuf`, encoding the given `PublicKey`.
-    fn new(pk: &PublicKey) -> PublicKeyEncodingBuf {
+impl PublicKeyEncBuf {
+    /// Create a new `PublicKeyEncBuf`, encoding the given `PublicKey`.
+    fn new(pk: &PublicKey) -> PublicKeyEncBuf {
         match pk.0 {
             _PublicKey::Ed25519(ref bytes) => {
                 let mut buf = String::with_capacity(SSB_PK_ED25519_ENCODED_LEN);
@@ -587,42 +587,42 @@ impl PublicKeyEncodingBuf {
                 buf.push_str(ED25519_SUFFIX);
                 debug_assert!(buf.len() == SSB_PK_ED25519_ENCODED_LEN);
 
-                PublicKeyEncodingBuf(buf)
+                PublicKeyEncBuf(buf)
             }
         }
     }
 
-    /// Convert into a `PublicKeyEncoding` (which behaves like a reference).
-    pub fn to_public_key_encoding(&self) -> PublicKeyEncoding {
-        PublicKeyEncoding(&self.0)
+    /// Convert to a `PublicKeyEnc` (which behaves like a reference).
+    pub fn as_public_key_enc(&self) -> PublicKeyEnc {
+        PublicKeyEnc(&self.0)
     }
 }
 
-impl From<PublicKey> for PublicKeyEncodingBuf {
-    fn from(pk: PublicKey) -> PublicKeyEncodingBuf {
-        PublicKeyEncodingBuf::new(&pk)
+impl From<PublicKey> for PublicKeyEncBuf {
+    fn from(pk: PublicKey) -> PublicKeyEncBuf {
+        PublicKeyEncBuf::new(&pk)
     }
 }
 
 /// Convert into a `String` (zero-cost operation).
-impl Into<String> for PublicKeyEncodingBuf {
+impl Into<String> for PublicKeyEncBuf {
     fn into(self) -> String {
         self.0
     }
 }
 
-/// Use this `PublicKeyEncondingBuf` as an `str` reference (zero-cost operation).
-impl AsRef<str> for PublicKeyEncodingBuf {
+/// Use this `PublicKeyEncBuf` as an `str` reference (zero-cost operation).
+impl AsRef<str> for PublicKeyEncBuf {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
-impl TryFrom<String> for PublicKeyEncodingBuf {
+impl TryFrom<String> for PublicKeyEncBuf {
     type Error = ();
     fn try_from(enc: String) -> Result<Self, Self::Error> {
         if encodes_public_key(&enc) {
-            Ok(PublicKeyEncodingBuf(enc))
+            Ok(PublicKeyEncBuf(enc))
         } else {
             Err(())
         }
@@ -631,31 +631,31 @@ impl TryFrom<String> for PublicKeyEncodingBuf {
 
 /// A reference to a utf8-encoding of a `PublicKey`.
 ///
-/// This is a thin wrapper around `str`: Every `PublicKeyEncoding` is also
+/// This is a thin wrapper around `str`: Every `PublicKeyEnc` is also
 /// an str (so the conversion is zero-cost), but not every `str` is the
 /// encoding of a `PublicKey`.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct PublicKeyEncoding<'a>(&'a str);
+pub struct PublicKeyEnc<'a>(&'a str);
 
-impl<'a> PublicKeyEncoding<'a> {
-    /// Convert into an owned `PublicKeyEncodingBuf`.
-    pub fn to_public_key_encoding_buf(&self) -> PublicKeyEncodingBuf {
-        PublicKeyEncodingBuf(self.0.to_owned())
+impl<'a> PublicKeyEnc<'a> {
+    /// Copies the slice into an owned `PublicKeyEncBuf`.
+    pub fn to_public_key_enc_buf(&self) -> PublicKeyEncBuf {
+        PublicKeyEncBuf(self.0.to_owned())
     }
 }
 
-/// Use this `PublicKeyEnconding` as an `str` reference (zero-cost operation).
-impl<'a> AsRef<str> for PublicKeyEncoding<'a> {
+/// Use this `PublicKeyEnc` as an `str` reference (zero-cost operation).
+impl<'a> AsRef<str> for PublicKeyEnc<'a> {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
-impl<'a> TryFrom<&'a str> for PublicKeyEncoding<'a> {
+impl<'a> TryFrom<&'a str> for PublicKeyEnc<'a> {
     type Error = ();
     fn try_from(enc: &'a str) -> Result<Self, Self::Error> {
         if encodes_public_key(enc) {
-            Ok(PublicKeyEncoding(enc))
+            Ok(PublicKeyEnc(enc))
         } else {
             Err(())
         }
@@ -664,15 +664,15 @@ impl<'a> TryFrom<&'a str> for PublicKeyEncoding<'a> {
 
 /// An owned utf8-encoding of a `SecretKey`.
 ///
-/// This is a thin wrapper around `String`: Every `SecretKeyEncodingBuf` is also
+/// This is a thin wrapper around `String`: Every `SecretKeyEncBuf` is also
 /// a string (so the conversion is zero-cost), but not every `String` is the
 /// encoding of a `SecretKey`.
 #[derive(Clone, PartialEq, Eq)]
-pub struct SecretKeyEncodingBuf(String);
+pub struct SecretKeyEncBuf(String);
 
-impl SecretKeyEncodingBuf {
-    /// Create a new `PublicKeyEncodingBuf`, encoding the given `PublicKey`.
-    pub fn new(sk: &SecretKey) -> SecretKeyEncodingBuf {
+impl SecretKeyEncBuf {
+    /// Create a new `PublicKeyEncBuf`, encoding the given `PublicKey`.
+    pub fn new(sk: &SecretKey) -> SecretKeyEncBuf {
         match sk.0 {
             _SecretKey::Ed25519(ref bytes) => {
                 let mut buf = String::with_capacity(SSB_SK_ED25519_ENCODED_LEN);
@@ -682,48 +682,48 @@ impl SecretKeyEncodingBuf {
                 buf.push_str(ED25519_SUFFIX);
                 debug_assert!(buf.len() == SSB_SK_ED25519_ENCODED_LEN);
 
-                SecretKeyEncodingBuf(buf)
+                SecretKeyEncBuf(buf)
             }
         }
     }
 
-    /// Convert into a `SecretKeyEncoding` (which behaves like a reference).
-    pub fn to_secret_key_encoding(&self) -> SecretKeyEncoding {
-        SecretKeyEncoding(&self.0)
+    /// Convert to a `SecretKeyEnc` (which behaves like a reference).
+    pub fn as_secret_key_enc(&self) -> SecretKeyEnc {
+        SecretKeyEnc(&self.0)
     }
 }
 
-impl fmt::Debug for SecretKeyEncodingBuf {
+impl fmt::Debug for SecretKeyEncBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SecretKeyEncodingBuf(\"****.ed25519\")")
+        write!(f, "SecretKeyEncBuf(\"****.ed25519\")")
     }
 }
 
-impl Drop for SecretKeyEncodingBuf {
+impl Drop for SecretKeyEncBuf {
     /// Zero out the memory.
     fn drop(&mut self) {
         memzero(unsafe { self.0.as_bytes_mut() })
     }
 }
 
-impl From<SecretKey> for SecretKeyEncodingBuf {
-    fn from(sk: SecretKey) -> SecretKeyEncodingBuf {
-        SecretKeyEncodingBuf::new(&sk)
+impl From<SecretKey> for SecretKeyEncBuf {
+    fn from(sk: SecretKey) -> SecretKeyEncBuf {
+        SecretKeyEncBuf::new(&sk)
     }
 }
 
-/// Use this `SecretKeyEncondingBuf` as an `str` reference (zero-cost operation).
-impl AsRef<str> for SecretKeyEncodingBuf {
+/// Use this `SecretKeyEncBuf` as an `str` reference (zero-cost operation).
+impl AsRef<str> for SecretKeyEncBuf {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
-impl TryFrom<String> for SecretKeyEncodingBuf {
+impl TryFrom<String> for SecretKeyEncBuf {
     type Error = ();
     fn try_from(enc: String) -> Result<Self, Self::Error> {
         if encodes_secret_key(&enc) {
-            Ok(SecretKeyEncodingBuf(enc))
+            Ok(SecretKeyEncBuf(enc))
         } else {
             Err(())
         }
@@ -732,37 +732,37 @@ impl TryFrom<String> for SecretKeyEncodingBuf {
 
 /// A reference to a utf8-encoding of a `SecretKey`.
 ///
-/// This is a thin wrapper around `str`: Every `SecretKeyEncoding` is also
+/// This is a thin wrapper around `str`: Every `SecretKeyEnc` is also
 /// an str (so the conversion is zero-cost), but not every `str` is the
 /// encoding of a `SecretKey`.
 #[derive(PartialEq, Eq)]
-pub struct SecretKeyEncoding<'a>(&'a str);
+pub struct SecretKeyEnc<'a>(&'a str);
 
-impl<'a> SecretKeyEncoding<'a> {
-    /// Convert into an owned `SecretKeyEncodingBuf`.
-    pub fn to_secret_key_encoding_buf(&self) -> SecretKeyEncodingBuf {
-        SecretKeyEncodingBuf(self.0.to_owned())
+impl<'a> SecretKeyEnc<'a> {
+    /// Copies the slice into an owned `SecretKeyEncBuf`.
+    pub fn to_secret_key_enc_buf(&self) -> SecretKeyEncBuf {
+        SecretKeyEncBuf(self.0.to_owned())
     }
 }
 
-impl<'a> fmt::Debug for SecretKeyEncoding<'a> {
+impl<'a> fmt::Debug for SecretKeyEnc<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SecretKeyEncoding(\"****.ed25519\")")
+        write!(f, "SecretKeyEnc(\"****.ed25519\")")
     }
 }
 
-/// Use this `SecretKeyEnconding` as an `str` reference (zero-cost operation).
-impl<'a> AsRef<str> for SecretKeyEncoding<'a> {
+/// Use this `SecretKeyEnc` as an `str` reference (zero-cost operation).
+impl<'a> AsRef<str> for SecretKeyEnc<'a> {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
-impl<'a> TryFrom<&'a str> for SecretKeyEncoding<'a> {
+impl<'a> TryFrom<&'a str> for SecretKeyEnc<'a> {
     type Error = ();
     fn try_from(enc: &'a str) -> Result<Self, Self::Error> {
         if encodes_secret_key(enc) {
-            Ok(SecretKeyEncoding(enc))
+            Ok(SecretKeyEnc(enc))
         } else {
             Err(())
         }
@@ -824,8 +824,8 @@ mod tests {
     #[test]
     fn encoding_ed25519() {
         let (pk, sk) = gen_keypair_ed25519();
-        let pk_enc = PublicKeyEncodingBuf::from(pk.clone());
-        let sk_enc = SecretKeyEncodingBuf::from(sk.clone());
+        let pk_enc = PublicKeyEncBuf::from(pk.clone());
+        let sk_enc = SecretKeyEncBuf::from(sk.clone());
 
         assert_eq!(PublicKey::from(pk_enc.clone()), pk);
         assert_eq!(SecretKey::from(sk_enc.clone()), sk);
