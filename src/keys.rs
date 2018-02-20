@@ -577,7 +577,7 @@ pub struct PublicKeyEncBuf(String);
 
 impl PublicKeyEncBuf {
     /// Create a new `PublicKeyEncBuf`, encoding the given `PublicKey`.
-    fn new(pk: &PublicKey) -> PublicKeyEncBuf {
+    pub fn new(pk: &PublicKey) -> PublicKeyEncBuf {
         match pk.0 {
             _PublicKey::Ed25519(ref bytes) => {
                 let mut buf = String::with_capacity(SSB_PK_ED25519_ENCODED_LEN);
