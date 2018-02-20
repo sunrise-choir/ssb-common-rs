@@ -1,6 +1,6 @@
 [package]
 name = "ssb-common"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Common types and data among various ssb modules."
 repository = "https://github.com/ssbc/ssb-common-rs"
@@ -8,7 +8,7 @@ readme = "README.md"
 license = "GPL-3.0"
 
 [dependencies]
-sodiumoxide = "0.0.15"
+sodiumoxide = "0.0.16"
 base64 = "0.9.0"
 regex = "0.2.6"
 lazy_static = "1.0.0"
