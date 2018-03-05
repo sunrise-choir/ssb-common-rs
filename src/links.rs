@@ -98,6 +98,43 @@ impl From<FeedId> for PublicKey {
     }
 }
 
+/// The id of a feed, referencing a `PublicKey` instead of owning it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FeedIdRef<'a>(&'a PublicKey);
+
+impl<'a> FeedIdRef<'a> {
+    /// Create a new `FeedIdRef` for the given `&'a PublicKey`.
+    pub fn new(pk: &'a PublicKey) -> FeedIdRef<'a> {
+        FeedIdRef(pk)
+    }
+
+    /// Get a reference to the underlying `PublicKey`.
+    pub fn get_ref(&self) -> &PublicKey {
+        self.0
+    }
+
+    /// Encode the `FeedId` as a `String`.
+    pub fn to_encoding(&self) -> String {
+        let mut buf = String::with_capacity(self.0.encoding_len());
+        buf.push_str("@");
+        buf.push_str(&self.0.to_encoding());
+        buf
+    }
+
+    /// The length of the `String` returned by `self.to_encoding()`.
+    pub fn encoding_len(&self) -> usize {
+        1 + self.0.encoding_len()
+    }
+}
+
+impl<'a> Serialize for FeedIdRef<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&self.to_encoding())
+    }
+}
+
 // TODO MsgId, BlobId, Link (an enum of either a FeedId, MsgId or BlobId)
 
 #[cfg(test)]
