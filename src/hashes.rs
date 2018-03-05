@@ -11,7 +11,7 @@ use std::fmt;
 use sodiumoxide::crypto::hash::sha256;
 use base64::{encode_config_buf, decode_config_slice, STANDARD};
 use serde::{self, Serialize, Serializer, Deserialize, Deserializer};
-use regex::{Regex, RegexBuilder};
+use regex::Regex;
 
 /// An ssb hash. This type abstracts over the fact that ssb can support multiple cryptographic
 /// primitives.
@@ -205,7 +205,7 @@ const SHA256_DIGEST_BASE64_LEN: usize = 44;
 const SSB_DIGEST_SHA256_ENCODED_LEN: usize = SHA256_DIGEST_BASE64_LEN + 7;
 
 lazy_static! {
-    static ref HASH_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{43}=\.sha256$").dot_matches_new_line(true).build().unwrap(); // TODO why dot matches newline?
+    static ref HASH_RE: Regex = Regex::new(r"^[0-9A-Za-z\+/]{43}=\.sha256$").unwrap();
 }
 
 /// Check whether a given string is the encoding of a `Hash`.
