@@ -1,6 +1,6 @@
 //! The cypherlinks used in ssb.
 
-use std::convert::From;
+use std::convert::{From, TryInto};
 use std::fmt;
 use std::str::FromStr;
 
@@ -390,7 +390,255 @@ impl<'a> Serialize for BlobIdRef<'a> {
     }
 }
 
-// TODO Link (an enum of either a FeedId, MsgId or BlobId)
+/// A cypherlink, either the id of a feed, a message or a blob.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Link {
+    /// A feed id.
+    Feed(FeedId),
+    /// A message id.
+    Message(MessageId),
+    /// A blob id.
+    Blob(BlobId),
+}
+
+impl Link {
+    /// Returns whether this `Link` is a feed id.
+    pub fn is_feed(&self) -> bool {
+        match *self {
+            Link::Feed(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns whether this `Link` is a message id.
+    pub fn is_message(&self) -> bool {
+        match *self {
+            Link::Message(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns whether this `Link` is a blob id.
+    pub fn is_blob(&self) -> bool {
+        match *self {
+            Link::Blob(_) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Serialize for Link {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        match self {
+            &Link::Feed(feed_id) => feed_id.serialize(serializer),
+            &Link::Message(message_id) => message_id.serialize(serializer),
+            &Link::Blob(blob_id) => blob_id.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Link {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// The error when failing to parse a `Link` from a string.
+#[derive(Debug, Copy, Clone)]
+pub struct LinkParseError;
+
+impl fmt::Display for LinkParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid link encoding")
+    }
+}
+
+/// This can be used to parse an encoded `Link`.
+impl FromStr for Link {
+    /// Fails if the given string does not contain an encoding of a `Link`.
+    type Err = LinkParseError;
+
+    fn from_str(enc: &str) -> Result<Link, LinkParseError> {
+        if enc.starts_with("@") {
+            enc.parse::<FeedId>()
+                .map(|feed_id| Link::Feed(feed_id))
+                .map_err(|_| LinkParseError)
+        } else if enc.starts_with("%") {
+            enc.parse::<MessageId>()
+                .map(|message_id| Link::Message(message_id))
+                .map_err(|_| LinkParseError)
+        } else if enc.starts_with("&") {
+            enc.parse::<BlobId>()
+                .map(|blob_id| Link::Blob(blob_id))
+                .map_err(|_| LinkParseError)
+        } else {
+            Err(LinkParseError)
+        }
+    }
+}
+
+impl From<FeedId> for Link {
+    fn from(feed_id: FeedId) -> Link {
+        Link::Feed(feed_id)
+    }
+}
+
+impl TryInto<FeedId> for Link {
+    /// Fails if the the link is not a feed id.
+    type Error = ();
+
+    fn try_into(self) -> Result<FeedId, Self::Error> {
+        match self {
+            Link::Feed(feed_id) => Ok(feed_id),
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<MessageId> for Link {
+    fn from(message_id: MessageId) -> Link {
+        Link::Message(message_id)
+    }
+}
+
+impl TryInto<MessageId> for Link {
+    /// Fails if the the link is not a message id.
+    type Error = ();
+
+    fn try_into(self) -> Result<MessageId, Self::Error> {
+        match self {
+            Link::Message(message_id) => Ok(message_id),
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<BlobId> for Link {
+    fn from(blob_id: BlobId) -> Link {
+        Link::Blob(blob_id)
+    }
+}
+
+impl TryInto<BlobId> for Link {
+    /// Fails if the the link is not a blob id.
+    type Error = ();
+
+    fn try_into(self) -> Result<BlobId, Self::Error> {
+        match self {
+            Link::Blob(blob_id) => Ok(blob_id),
+            _ => Err(()),
+        }
+    }
+}
+
+/// A cypherlink, either the id of a feed, a message or a blob. This references its content rather
+/// than owning it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LinkRef<'a> {
+    /// A feed id.
+    Feed(FeedIdRef<'a>),
+    /// A message id.
+    Message(MessageIdRef<'a>),
+    /// A blob id.
+    Blob(BlobIdRef<'a>),
+}
+
+impl<'a> LinkRef<'a> {
+    /// Returns whether this `LinkRef` is a feed id.
+    pub fn is_feed(&self) -> bool {
+        match *self {
+            LinkRef::Feed(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns whether this `LinkRef` is a message id.
+    pub fn is_message(&self) -> bool {
+        match *self {
+            LinkRef::Message(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns whether this `LinkRef` is a blob id.
+    pub fn is_blob(&self) -> bool {
+        match *self {
+            LinkRef::Blob(_) => true,
+            _ => false,
+        }
+    }
+}
+
+impl<'a> Serialize for LinkRef<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        match self {
+            &LinkRef::Feed(feed_id) => feed_id.serialize(serializer),
+            &LinkRef::Message(message_id) => message_id.serialize(serializer),
+            &LinkRef::Blob(blob_id) => blob_id.serialize(serializer),
+        }
+    }
+}
+
+impl<'a> From<FeedIdRef<'a>> for LinkRef<'a> {
+    fn from(feed_id: FeedIdRef<'a>) -> LinkRef<'a> {
+        LinkRef::Feed(feed_id)
+    }
+}
+
+impl<'a> TryInto<FeedIdRef<'a>> for LinkRef<'a> {
+    /// Fails if the the link is not a feed id.
+    type Error = ();
+
+    fn try_into(self) -> Result<FeedIdRef<'a>, Self::Error> {
+        match self {
+            LinkRef::Feed(feed_id) => Ok(feed_id),
+            _ => Err(()),
+        }
+    }
+}
+
+impl<'a> From<MessageIdRef<'a>> for LinkRef<'a> {
+    fn from(message_id: MessageIdRef<'a>) -> LinkRef<'a> {
+        LinkRef::Message(message_id)
+    }
+}
+
+impl<'a> TryInto<MessageIdRef<'a>> for LinkRef<'a> {
+    /// Fails if the the link is not a message id.
+    type Error = ();
+
+    fn try_into(self) -> Result<MessageIdRef<'a>, Self::Error> {
+        match self {
+            LinkRef::Message(message_id) => Ok(message_id),
+            _ => Err(()),
+        }
+    }
+}
+
+impl<'a> From<BlobIdRef<'a>> for LinkRef<'a> {
+    fn from(blob_id: BlobIdRef<'a>) -> LinkRef<'a> {
+        LinkRef::Blob(blob_id)
+    }
+}
+
+impl<'a> TryInto<BlobIdRef<'a>> for LinkRef<'a> {
+    /// Fails if the the link is not a blob id.
+    type Error = ();
+
+    fn try_into(self) -> Result<BlobIdRef<'a>, Self::Error> {
+        match self {
+            LinkRef::Blob(blob_id) => Ok(blob_id),
+            _ => Err(()),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -440,5 +688,23 @@ mod tests {
         let blob_id_enc = to_string(&blob_id).unwrap();
 
         assert_eq!(from_str::<BlobId>(&blob_id_enc).unwrap(), blob_id);
+    }
+
+    #[test]
+    fn serde_link() {
+        let (pk, _) = gen_keypair();
+        let feed_link = Link::from(FeedId::new(pk));
+        let feed_link_enc = to_string(&feed_link).unwrap();
+        assert_eq!(from_str::<Link>(&feed_link_enc).unwrap(), feed_link);
+
+        let message_digest = hash(&[0, 1, 2, 3, 4, 5, 6, 7]);
+        let message_link = Link::from(MessageId::new(message_digest));
+        let message_link_enc = to_string(&message_link).unwrap();
+        assert_eq!(from_str::<Link>(&message_link_enc).unwrap(), message_link);
+
+        let blob_digest = hash(&[0, 1, 2, 3, 4, 5, 6, 7]);
+        let blob_link = Link::from(BlobId::new(blob_digest));
+        let blob_link_enc = to_string(&blob_link).unwrap();
+        assert_eq!(from_str::<Link>(&blob_link_enc).unwrap(), blob_link);
     }
 }
