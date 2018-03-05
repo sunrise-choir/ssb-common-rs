@@ -598,10 +598,11 @@ pub fn encodes_secret_key(enc: &str) -> bool {
     SECRET_KEY_RE.is_match(enc)
 }
 
-// TODO use serde for the tests
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use serde_json::{to_string, from_str};
 
     #[test]
     fn ed25519() {
@@ -652,72 +653,51 @@ mod tests {
     }
 
     #[test]
-    fn encoding_ed25519() {
+    fn serde_ed25519() {
         let (pk, sk) = gen_keypair_ed25519();
-        let pk_enc = PublicKeyEncBuf::from(pk.clone());
-        let sk_enc = SecretKeyEncBuf::from(sk.clone());
+        let pk_enc = to_string(&pk).unwrap();
+        let sk_enc = to_string(&sk).unwrap();
 
-        assert_eq!(PublicKey::from(pk_enc.clone()), pk);
-        assert_eq!(SecretKey::from(sk_enc.clone()), sk);
+        assert_eq!(from_str::<PublicKey>(&pk_enc).unwrap(), pk);
+        assert_eq!(from_str::<SecretKey>(&sk_enc).unwrap(), sk);
 
-        let parsed_pk = "zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
-            .parse::<PublicKey>()
+        let parsed_pk = from_str::<PublicKey>("\"zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519\"")
             .unwrap();
         assert!(parsed_pk.is_ed25519());
 
         // too short
-        assert!("urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
-                    .parse::<PublicKey>()
+        assert!(from_str::<PublicKey>("\"urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519\"")
                     .is_err());
         // too long
-        assert!("azurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
-                    .parse::<PublicKey>()
+        assert!(from_str::<PublicKey>("\"azurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519\"")
                     .is_err());
         // invalid character
-        assert!("-urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
-                    .parse::<PublicKey>()
+        assert!(from_str::<PublicKey>("\"-urF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519\"")
                     .is_err());
         // very invalid character
-        assert!("💖8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519"
-                    .parse::<PublicKey>()
+        assert!(from_str::<PublicKey>("\"💖8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25519\"")
                     .is_err());
         // invalid suffix
-        assert!("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25518"
-                    .parse::<PublicKey>()
+        assert!(from_str::<PublicKey>("\"zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hA=.ed25518\"")
                     .is_err());
         // no trailing =
-        assert!("zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hAf.ed25519"
-                    .parse::<PublicKey>()
+        assert!(from_str::<PublicKey>("\"zurF8X68ArfRM71dF3mKh36W0xDM8QmOnAS5bYOq8hAf.ed25519\"")
                     .is_err());
 
-        let parsed_sk = "KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
-            .parse::<SecretKey>()
-            .unwrap();
+        let parsed_sk = from_str::<SecretKey>("\"KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519\"").unwrap();
         assert!(parsed_sk.is_ed25519());
 
         // too short
-        assert!("ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
-                    .parse::<SecretKey>()
-                    .is_err());
+        assert!(from_str::<SecretKey>("\"ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519\"").is_err());
         // too long
-        assert!("aKISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
-                    .parse::<SecretKey>()
-                    .is_err());
+        assert!(from_str::<SecretKey>("\"aKISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519\"").is_err());
         // invalid character
-        assert!("-ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
-                    .parse::<SecretKey>()
-                    .is_err());
+        assert!(from_str::<SecretKey>("\"-ISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519\"").is_err());
         // very invalid character
-        assert!("💖ctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519"
-                    .parse::<SecretKey>()
-                    .is_err());
+        assert!(from_str::<SecretKey>("\"💖ctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25519\"").is_err());
         // invalid suffix
-        assert!("KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25518"
-                    .parse::<SecretKey>()
-                    .is_err());
+        assert!(from_str::<SecretKey>("\"KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQ==.ed25518\"").is_err());
         // no trailing ==
-        assert!("KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQf=.ed25519"
-                    .parse::<SecretKey>()
-                    .is_err());
+        assert!(from_str::<SecretKey>("\"KISUctzp8hH6VGSsG0drx+b3AFDuU1Q9/qX0gxtcOt9cDW7SbU0x7DJqlQ42fbpoPYjdJSO7Wty4a6JLu9NOJQf=.ed25519\"").is_err());
     }
 }

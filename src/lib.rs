@@ -9,6 +9,9 @@ extern crate serde;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(test)]
+extern crate serde_json;
+
 /// The default tcp port of an ssb server.
 pub const DEFAULT_TCP_PORT: u16 = 8008;
 /// The default websocket port of an ssb server.
