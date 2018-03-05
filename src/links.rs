@@ -241,7 +241,7 @@ impl<'a> MessageIdRef<'a> {
         self.0
     }
 
-    /// Encode the `MessageId` as a `String`.
+    /// Encode the `MessageIdRef` as a `String`.
     pub fn to_encoding(&self) -> String {
         let mut buf = String::with_capacity(self.0.encoding_len());
         buf.push_str("%");
@@ -263,7 +263,134 @@ impl<'a> Serialize for MessageIdRef<'a> {
     }
 }
 
-// TODO BlobId, Link (an enum of either a FeedId, MsgId or BlobId)
+/// The id of a blob.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BlobId(SSBHash);
+
+impl BlobId {
+    /// Create a new `BlobId` for the given `Hash`.
+    pub fn new(hash: SSBHash) -> BlobId {
+        BlobId(hash)
+    }
+
+    /// Get a reference to the underlying `Hash`.
+    pub fn get_ref(&self) -> &SSBHash {
+        &self.0
+    }
+
+    /// Unwrap this `BlobId`, returning the underlying `Hash`.
+    pub fn into_inner(self) -> SSBHash {
+        self.0
+    }
+
+    /// Encode the `BlobId` as a `String`.
+    pub fn to_encoding(&self) -> String {
+        let mut buf = String::with_capacity(self.0.encoding_len());
+        buf.push_str("&");
+        buf.push_str(&self.0.to_encoding());
+        buf
+    }
+
+    /// The length of the `String` returned by `self.to_encoding()`.
+    pub fn encoding_len(&self) -> usize {
+        1 + self.0.encoding_len()
+    }
+}
+
+impl Serialize for BlobId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&self.to_encoding())
+    }
+}
+
+impl<'de> Deserialize<'de> for BlobId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// The error when failing to parse a `BlobId` from a string.
+#[derive(Debug, Copy, Clone)]
+pub struct BlobIdParseError;
+
+impl fmt::Display for BlobIdParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid blob id encoding")
+    }
+}
+
+/// This can be used to parse an encoded `BlobId`.
+impl FromStr for BlobId {
+    /// Fails if the given string does not contain an encoding of a `BlobId`.
+    type Err = BlobIdParseError;
+
+    fn from_str(enc: &str) -> Result<BlobId, BlobIdParseError> {
+        if enc.starts_with("&") {
+            enc[1..]
+                .parse::<SSBHash>()
+                .map(|hash| BlobId(hash))
+                .map_err(|_| BlobIdParseError)
+        } else {
+            Err(BlobIdParseError)
+        }
+    }
+}
+
+impl From<SSBHash> for BlobId {
+    fn from(hash: SSBHash) -> BlobId {
+        BlobId::new(hash)
+    }
+}
+
+impl From<BlobId> for SSBHash {
+    fn from(blob_id: BlobId) -> SSBHash {
+        blob_id.0
+    }
+}
+
+/// The id of a blob, referencing a `Hash` instead of owning it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BlobIdRef<'a>(&'a SSBHash);
+
+impl<'a> BlobIdRef<'a> {
+    /// Create a new `BlobIdRef` for the given `&'a Hash`.
+    pub fn new(hash: &'a SSBHash) -> BlobIdRef<'a> {
+        BlobIdRef(hash)
+    }
+
+    /// Get a reference to the underlying `Hash`.
+    pub fn get_ref(&self) -> &SSBHash {
+        self.0
+    }
+
+    /// Encode the `BlobIdRef` as a `String`.
+    pub fn to_encoding(&self) -> String {
+        let mut buf = String::with_capacity(self.0.encoding_len());
+        buf.push_str("&");
+        buf.push_str(&self.0.to_encoding());
+        buf
+    }
+
+    /// The length of the `String` returned by `self.to_encoding()`.
+    pub fn encoding_len(&self) -> usize {
+        1 + self.0.encoding_len()
+    }
+}
+
+impl<'a> Serialize for BlobIdRef<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&self.to_encoding())
+    }
+}
+
+// TODO Link (an enum of either a FeedId, MsgId or BlobId)
 
 #[cfg(test)]
 mod tests {
@@ -290,14 +417,28 @@ mod tests {
     #[test]
     fn serde_message_id() {
         assert!("".parse::<MessageId>().is_err());
-        assert!("@".parse::<MessageId>().is_err());
         assert!("%".parse::<MessageId>().is_err());
-        assert!("@foo".parse::<MessageId>().is_err());
+        assert!("@".parse::<MessageId>().is_err());
+        assert!("%foo".parse::<MessageId>().is_err());
 
         let digest = hash(&[0, 1, 2, 3, 4, 5, 6, 7]);
         let message_id = MessageId::new(digest);
         let message_id_enc = to_string(&message_id).unwrap();
 
         assert_eq!(from_str::<MessageId>(&message_id_enc).unwrap(), message_id);
+    }
+
+    #[test]
+    fn serde_blob_id() {
+        assert!("".parse::<BlobId>().is_err());
+        assert!("&".parse::<BlobId>().is_err());
+        assert!("%".parse::<BlobId>().is_err());
+        assert!("&foo".parse::<BlobId>().is_err());
+
+        let digest = hash(&[0, 1, 2, 3, 4, 5, 6, 7]);
+        let blob_id = BlobId::new(digest);
+        let blob_id_enc = to_string(&blob_id).unwrap();
+
+        assert_eq!(from_str::<BlobId>(&blob_id_enc).unwrap(), blob_id);
     }
 }
