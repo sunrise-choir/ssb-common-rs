@@ -17,14 +17,12 @@
 //! created via the `new` functions of `PublicKeyEnodingBuf` and
 //! `SecretKeyEncBuf`.
 
-use std::convert::{From, TryInto, TryFrom};
+use std::convert::{From, TryInto};
 use std::str::FromStr;
-use std::borrow::ToOwned;
 use std::ops::{Index, Range, RangeTo, RangeFrom, RangeFull};
 use std::fmt;
 
 use sodiumoxide::crypto::sign;
-use sodiumoxide::utils::memzero;
 use base64::{encode_config_buf, decode_config_slice, STANDARD};
 use regex::{Regex, RegexBuilder};
 use serde::{self, Serialize, Serializer, Deserialize, Deserializer};
@@ -308,22 +306,47 @@ impl SecretKey {
         }
     }
 
-    /// Create a `SecretKey` from a `SecretKeyEnc`.
-    ///
-    /// Prefer to directly use the `FromStr` impl.
-    pub fn from_encoding(enc: &SecretKeyEnc) -> SecretKey {
-        if enc.0.ends_with(ED25519_SUFFIX) {
-            let mut bytes = [0u8; sign::SECRETKEYBYTES];
+    /// Encode the `SecretKey` as a `String`.
+    pub fn to_encoding(&self) -> String {
+        match self.0 {
+            _SecretKey::Ed25519(ref bytes) => {
+                let mut buf = String::with_capacity(SSB_SK_ED25519_ENCODED_LEN);
+                encode_config_buf(&bytes[..], STANDARD, &mut buf);
+                debug_assert!(buf.len() == ED25519_SK_BASE64_LEN);
 
-            match decode_config_slice(&enc.0[..ED25519_SK_BASE64_LEN], STANDARD, &mut bytes) {
-                Ok(len) => debug_assert!(len == sign::SECRETKEYBYTES),
-                Err(_) => unreachable!(),
+                buf.push_str(ED25519_SUFFIX);
+                debug_assert!(buf.len() == SSB_SK_ED25519_ENCODED_LEN);
+
+                buf
             }
-
-            SecretKey(_SecretKey::Ed25519(sign::SecretKey(bytes)))
-        } else {
-            unreachable!()
         }
+    }
+}
+
+impl Serialize for SecretKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&self.to_encoding())
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// The error when failing to parse a `PublicKey` from a string.
+#[derive(Debug, Copy, Clone)]
+pub struct SecretKeyParseError;
+
+impl fmt::Display for SecretKeyParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid secret key encoding")
     }
 }
 
@@ -390,26 +413,20 @@ impl Index<RangeFull> for SecretKey {
     }
 }
 
-impl From<SecretKeyEncBuf> for SecretKey {
-    fn from(enc: SecretKeyEncBuf) -> SecretKey {
-        SecretKey::from_encoding(&enc.as_secret_key_enc())
-    }
-}
-
 /// This can be used to parse an encoded `SecretKey`.
 impl FromStr for SecretKey {
     /// Fails if the given string does not contain an encoding of a `SecretKey`.
-    type Err = ();
+    type Err = SecretKeyParseError;
 
-    fn from_str(enc: &str) -> Result<SecretKey, ()> {
+    fn from_str(enc: &str) -> Result<SecretKey, SecretKeyParseError> {
         if !encodes_secret_key(enc) {
-            Err(())
+            Err(SecretKeyParseError)
         } else {
             let mut buf = [0; sign::SECRETKEYBYTES];
 
             match decode_config_slice(&enc[..ED25519_SK_BASE64_LEN], STANDARD, &mut buf) {
                 Ok(_) => Ok(SecretKey(_SecretKey::Ed25519(sign::SecretKey(buf)))),
-                Err(_) => Err(()),
+                Err(_) => Err(SecretKeyParseError),
             }
         }
 
@@ -581,113 +598,7 @@ pub fn encodes_secret_key(enc: &str) -> bool {
     SECRET_KEY_RE.is_match(enc)
 }
 
-/// An owned utf8-encoding of a `SecretKey`.
-///
-/// This is a thin wrapper around `String`: Every `SecretKeyEncBuf` is also
-/// a string (so the conversion is zero-cost), but not every `String` is the
-/// encoding of a `SecretKey`.
-#[derive(Clone, PartialEq, Eq)]
-pub struct SecretKeyEncBuf(String);
-
-impl SecretKeyEncBuf {
-    /// Create a new `PublicKeyEncBuf`, encoding the given `PublicKey`.
-    pub fn new(sk: &SecretKey) -> SecretKeyEncBuf {
-        match sk.0 {
-            _SecretKey::Ed25519(ref bytes) => {
-                let mut buf = String::with_capacity(SSB_SK_ED25519_ENCODED_LEN);
-                encode_config_buf(&bytes[..], STANDARD, &mut buf);
-                debug_assert!(buf.len() == ED25519_SK_BASE64_LEN);
-
-                buf.push_str(ED25519_SUFFIX);
-                debug_assert!(buf.len() == SSB_SK_ED25519_ENCODED_LEN);
-
-                SecretKeyEncBuf(buf)
-            }
-        }
-    }
-
-    /// Convert to a `SecretKeyEnc` (which behaves like a reference).
-    pub fn as_secret_key_enc(&self) -> SecretKeyEnc {
-        SecretKeyEnc(&self.0)
-    }
-}
-
-impl fmt::Debug for SecretKeyEncBuf {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SecretKeyEncBuf(\"****.ed25519\")")
-    }
-}
-
-impl Drop for SecretKeyEncBuf {
-    /// Zero out the memory.
-    fn drop(&mut self) {
-        memzero(unsafe { self.0.as_bytes_mut() })
-    }
-}
-
-impl From<SecretKey> for SecretKeyEncBuf {
-    fn from(sk: SecretKey) -> SecretKeyEncBuf {
-        SecretKeyEncBuf::new(&sk)
-    }
-}
-
-/// Use this `SecretKeyEncBuf` as an `str` reference (zero-cost operation).
-impl AsRef<str> for SecretKeyEncBuf {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl TryFrom<String> for SecretKeyEncBuf {
-    type Error = ();
-    fn try_from(enc: String) -> Result<Self, Self::Error> {
-        if encodes_secret_key(&enc) {
-            Ok(SecretKeyEncBuf(enc))
-        } else {
-            Err(())
-        }
-    }
-}
-
-/// A reference to a utf8-encoding of a `SecretKey`.
-///
-/// This is a thin wrapper around `str`: Every `SecretKeyEnc` is also
-/// an str (so the conversion is zero-cost), but not every `str` is the
-/// encoding of a `SecretKey`.
-#[derive(PartialEq, Eq)]
-pub struct SecretKeyEnc<'a>(&'a str);
-
-impl<'a> SecretKeyEnc<'a> {
-    /// Copies the slice into an owned `SecretKeyEncBuf`.
-    pub fn to_secret_key_enc_buf(&self) -> SecretKeyEncBuf {
-        SecretKeyEncBuf(self.0.to_owned())
-    }
-}
-
-impl<'a> fmt::Debug for SecretKeyEnc<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SecretKeyEnc(\"****.ed25519\")")
-    }
-}
-
-/// Use this `SecretKeyEnc` as an `str` reference (zero-cost operation).
-impl<'a> AsRef<str> for SecretKeyEnc<'a> {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl<'a> TryFrom<&'a str> for SecretKeyEnc<'a> {
-    type Error = ();
-    fn try_from(enc: &'a str) -> Result<Self, Self::Error> {
-        if encodes_secret_key(enc) {
-            Ok(SecretKeyEnc(enc))
-        } else {
-            Err(())
-        }
-    }
-}
-
+// TODO use serde for the tests
 #[cfg(test)]
 mod tests {
     use super::*;
