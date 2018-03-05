@@ -27,17 +27,12 @@ use sodiumoxide::crypto::sign;
 use sodiumoxide::utils::memzero;
 use base64::{encode_config_buf, decode_config_slice, STANDARD};
 use regex::{Regex, RegexBuilder};
+use serde::{self, Serialize, Serializer, Deserialize, Deserializer};
 
 /// An ssb public key. This type abstracts over the fact that ssb can support
 /// multiple cryptographic primitives.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PublicKey(_PublicKey);
-
-impl fmt::Debug for PublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 enum _PublicKey {
@@ -129,22 +124,67 @@ impl PublicKey {
         }
     }
 
-    /// Create a `PublicKey` from a `PublicKeyEnc`.
-    ///
-    /// Prefer to directly use the `FromStr` impl.
-    pub fn from_encoding(enc: &PublicKeyEnc) -> PublicKey {
-        if enc.0.ends_with(ED25519_SUFFIX) {
-            let mut bytes = [0u8; sign::PUBLICKEYBYTES];
+    /// Encode the `PublicKey` as a `String`.
+    pub fn to_encoding(&self) -> String {
+        match self.0 {
+            _PublicKey::Ed25519(ref bytes) => {
+                let mut buf = String::with_capacity(SSB_PK_ED25519_ENCODED_LEN);
+                encode_config_buf(bytes, STANDARD, &mut buf);
+                debug_assert!(buf.len() == ED25519_PK_BASE64_LEN);
 
-            match decode_config_slice(&enc.0[..ED25519_PK_BASE64_LEN], STANDARD, &mut bytes) {
-                Ok(len) => debug_assert!(len == sign::PUBLICKEYBYTES),
-                Err(_) => unreachable!(),
+                buf.push_str(ED25519_SUFFIX);
+                debug_assert!(buf.len() == SSB_PK_ED25519_ENCODED_LEN);
+
+                buf
             }
-
-            PublicKey(_PublicKey::Ed25519(sign::PublicKey(bytes)))
-        } else {
-            unreachable!()
         }
+    }
+}
+
+impl Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&self.to_encoding())
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+/// The error when failing to parse a `PublicKey` from a string.
+#[derive(Debug, Copy, Clone)]
+pub struct PublicKeyParseError;
+
+impl fmt::Display for PublicKeyParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid public key encoding")
+    }
+}
+
+/// This can be used to parse an encoded `PublicKey`.
+impl FromStr for PublicKey {
+    /// Fails if the given string does not contain an encoding of a `PublicKey`.
+    type Err = PublicKeyParseError;
+
+    fn from_str(enc: &str) -> Result<PublicKey, PublicKeyParseError> {
+        if !encodes_public_key(enc) {
+            Err(PublicKeyParseError)
+        } else {
+            let mut buf = [0; sign::PUBLICKEYBYTES];
+
+            match decode_config_slice(&enc[..ED25519_PK_BASE64_LEN], STANDARD, &mut buf) {
+                Ok(_) => Ok(PublicKey(_PublicKey::Ed25519(sign::PublicKey(buf)))),
+                Err(_) => Err(PublicKeyParseError),
+            }
+        }
+
     }
 }
 
@@ -210,32 +250,6 @@ impl Index<RangeFull> for PublicKey {
         match self.0 {
             _PublicKey::Ed25519(ref pk) => pk.index(_index),
         }
-    }
-}
-
-impl From<PublicKeyEncBuf> for PublicKey {
-    fn from(enc: PublicKeyEncBuf) -> PublicKey {
-        PublicKey::from_encoding(&enc.as_public_key_enc())
-    }
-}
-
-/// This can be used to parse an encoded `PublicKey`.
-impl FromStr for PublicKey {
-    /// Fails if the given string does not contain an encoding of a `PublicKey`.
-    type Err = ();
-
-    fn from_str(enc: &str) -> Result<PublicKey, ()> {
-        if !encodes_public_key(enc) {
-            Err(())
-        } else {
-            let mut buf = [0; sign::PUBLICKEYBYTES];
-
-            match decode_config_slice(&enc[..ED25519_PK_BASE64_LEN], STANDARD, &mut buf) {
-                Ok(_) => Ok(PublicKey(_PublicKey::Ed25519(sign::PublicKey(buf)))),
-                Err(_) => Err(()),
-            }
-        }
-
     }
 }
 
@@ -565,101 +579,6 @@ pub fn encodes_public_key(enc: &str) -> bool {
 /// Check whether a given string is the encoding of a `SecretKey`.
 pub fn encodes_secret_key(enc: &str) -> bool {
     SECRET_KEY_RE.is_match(enc)
-}
-
-/// An owned utf8-encoding of a `PublicKey`.
-///
-/// This is a thin wrapper around `String`: Every `PublicKeyEncBuf` is also
-/// a string (so the conversion is zero-cost), but not every `String` is the
-/// encoding of a `PublicKey`.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct PublicKeyEncBuf(String);
-
-impl PublicKeyEncBuf {
-    /// Create a new `PublicKeyEncBuf`, encoding the given `PublicKey`.
-    pub fn new(pk: &PublicKey) -> PublicKeyEncBuf {
-        match pk.0 {
-            _PublicKey::Ed25519(ref bytes) => {
-                let mut buf = String::with_capacity(SSB_PK_ED25519_ENCODED_LEN);
-                encode_config_buf(bytes, STANDARD, &mut buf);
-                debug_assert!(buf.len() == ED25519_PK_BASE64_LEN);
-
-                buf.push_str(ED25519_SUFFIX);
-                debug_assert!(buf.len() == SSB_PK_ED25519_ENCODED_LEN);
-
-                PublicKeyEncBuf(buf)
-            }
-        }
-    }
-
-    /// Convert to a `PublicKeyEnc` (which behaves like a reference).
-    pub fn as_public_key_enc(&self) -> PublicKeyEnc {
-        PublicKeyEnc(&self.0)
-    }
-}
-
-impl From<PublicKey> for PublicKeyEncBuf {
-    fn from(pk: PublicKey) -> PublicKeyEncBuf {
-        PublicKeyEncBuf::new(&pk)
-    }
-}
-
-/// Convert into a `String` (zero-cost operation).
-impl Into<String> for PublicKeyEncBuf {
-    fn into(self) -> String {
-        self.0
-    }
-}
-
-/// Use this `PublicKeyEncBuf` as an `str` reference (zero-cost operation).
-impl AsRef<str> for PublicKeyEncBuf {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl TryFrom<String> for PublicKeyEncBuf {
-    type Error = ();
-    fn try_from(enc: String) -> Result<Self, Self::Error> {
-        if encodes_public_key(&enc) {
-            Ok(PublicKeyEncBuf(enc))
-        } else {
-            Err(())
-        }
-    }
-}
-
-/// A reference to a utf8-encoding of a `PublicKey`.
-///
-/// This is a thin wrapper around `str`: Every `PublicKeyEnc` is also
-/// an str (so the conversion is zero-cost), but not every `str` is the
-/// encoding of a `PublicKey`.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct PublicKeyEnc<'a>(&'a str);
-
-impl<'a> PublicKeyEnc<'a> {
-    /// Copies the slice into an owned `PublicKeyEncBuf`.
-    pub fn to_public_key_enc_buf(&self) -> PublicKeyEncBuf {
-        PublicKeyEncBuf(self.0.to_owned())
-    }
-}
-
-/// Use this `PublicKeyEnc` as an `str` reference (zero-cost operation).
-impl<'a> AsRef<str> for PublicKeyEnc<'a> {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl<'a> TryFrom<&'a str> for PublicKeyEnc<'a> {
-    type Error = ();
-    fn try_from(enc: &'a str) -> Result<Self, Self::Error> {
-        if encodes_public_key(enc) {
-            Ok(PublicKeyEnc(enc))
-        } else {
-            Err(())
-        }
-    }
 }
 
 /// An owned utf8-encoding of a `SecretKey`.

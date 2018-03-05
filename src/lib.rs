@@ -5,6 +5,7 @@
 extern crate sodiumoxide;
 extern crate base64;
 extern crate regex;
+extern crate serde;
 #[macro_use]
 extern crate lazy_static;
 
