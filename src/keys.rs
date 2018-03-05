@@ -22,7 +22,7 @@ use serde::{self, Serialize, Serializer, Deserialize, Deserializer};
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PublicKey(_PublicKey);
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum _PublicKey {
     // An [Ed25519](http://ed25519.cr.yp.to/) public key, as used by
     // `sodiumoxide::crypto::sign`.
@@ -255,7 +255,7 @@ impl Index<RangeFull> for PublicKey {
 #[derive(Clone, PartialEq, Eq)]
 pub struct SecretKey(_SecretKey);
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum _SecretKey {
     /// An [Ed25519](http://ed25519.cr.yp.to/) secret key, as used by
     /// `sodiumoxide::crypto::sign`.
@@ -555,7 +555,7 @@ impl Index<RangeFull> for Signature {
 /// `sodiumoxide::init()` once before using any other function from sodiumoxide.
 pub fn gen_keypair() -> (PublicKey, SecretKey) {
     let (pk, sk) = sign::gen_keypair();
-    (PublicKey::from(pk), SecretKey::from(sk))
+    (PublicKey::from(pk), SecretKey::from(sk)) // TODO delegate to gen_keypair_ed25519
 }
 
 /// Randomly generate a secret key and a corresponding public key, using the
@@ -587,7 +587,7 @@ const ED25519_SK_BASE64_LEN: usize = 88;
 const SSB_SK_ED25519_ENCODED_LEN: usize = ED25519_SK_BASE64_LEN + 8;
 
 lazy_static! {
-    static ref PUBLIC_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{43}=\.ed25519$").dot_matches_new_line(true).build().unwrap();
+    static ref PUBLIC_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{43}=\.ed25519$").dot_matches_new_line(true).build().unwrap(); // TODO why dot matches newline?
 
     static ref SECRET_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{86}==\.ed25519$").dot_matches_new_line(true).build().unwrap();
 }

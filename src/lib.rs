@@ -25,5 +25,6 @@ pub const MAINNET_IDENTIFIER: [u8; 32] = [212, 161, 203, 136, 166, 111, 2, 248, 
                                           57, 183, 85, 132, 90, 159, 251];
 
 pub mod directory;
+pub mod hashes;
 pub mod keys;
 pub mod links;
