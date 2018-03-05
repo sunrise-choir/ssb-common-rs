@@ -6,16 +6,6 @@
 //!
 //! Aside from providing these types, this module also implements the encoding
 //! used in ssb to store and transmit keys.
-//!
-//! `PublicKeyEncBuf` (owned), `PublicKeyEnc` (reference),
-//! `SecretKeyEncBuf` (owned) and `SecretKeyEnc` (reference) are
-//! typesafe wrappers around `Strings` and `&str`s that always hold valid
-//! encodings of ssb keys.
-//!
-//! When given strings which are expected to encode keys, the `FromStr` impls of
-//! `PublicKey` and `SecretKey` should be used for decoding. Encodings should be
-//! created via the `new` functions of `PublicKeyEnodingBuf` and
-//! `SecretKeyEncBuf`.
 
 use std::convert::{From, TryInto};
 use std::str::FromStr;
@@ -584,7 +574,7 @@ const SSB_SK_ED25519_ENCODED_LEN: usize = ED25519_SK_BASE64_LEN + 8;
 
 lazy_static! {
     static ref PUBLIC_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{43}=\.ed25519$").dot_matches_new_line(true).build().unwrap();
-    
+
     static ref SECRET_KEY_RE: Regex = RegexBuilder::new(r"^[0-9A-Za-z\+/]{86}==\.ed25519$").dot_matches_new_line(true).build().unwrap();
 }
 
