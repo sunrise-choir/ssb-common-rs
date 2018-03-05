@@ -127,6 +127,13 @@ impl PublicKey {
             }
         }
     }
+
+    /// The length of the `String` returned by `self.to_encoding()`.
+    pub fn encoding_len(&self) -> usize {
+        match self.0 {
+            _PublicKey::Ed25519(_) => SSB_PK_ED25519_ENCODED_LEN,
+        }
+    }
 }
 
 impl Serialize for PublicKey {
@@ -309,6 +316,13 @@ impl SecretKey {
 
                 buf
             }
+        }
+    }
+
+    /// The length of the `String` returned by `self.to_encoding()`.
+    pub fn encoding_len(&self) -> usize {
+        match self.0 {
+            _SecretKey::Ed25519(_) => SSB_SK_ED25519_ENCODED_LEN,
         }
     }
 }
