@@ -1,6 +1,6 @@
 [package]
 name = "ssb-common"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Common types and data among various ssb modules."
 repository = "https://github.com/ssbc/ssb-common-rs"
