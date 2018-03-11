@@ -5,7 +5,7 @@ authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Common types and data among various ssb modules."
 repository = "https://github.com/ssbc/ssb-common-rs"
 readme = "README.md"
-license = "GPL-3.0"
+license = "AGPL-3.0"
 
 [dependencies]
 sodiumoxide = "0.0.16"
