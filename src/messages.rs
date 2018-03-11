@@ -1,14 +1,24 @@
 //! The messages used in ssb.
 
+use serde_json::Number;
+
 use links::{MessageId, FeedId};
 
+/// The timestamps used in ssb.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Timestamp(Number);
+
+/// The sequence numbers used in ssb.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SequenceNumber(Number);
+
 /// A message (the kind of thing that is stored in the database).
-#[derive(Debug, PartialEq, Eq, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Message<T> {
     previous: Option<MessageId>,
     author: FeedId,
-    sequence: u64,
-    timestamp: u64, // TODO use std::time::SystemTime instead?
+    sequence: SequenceNumber,
+    timestamp: Timestamp,
     hash: PossibleHash,
     content: T,
     signature: String, // TODO create a type for this
@@ -35,13 +45,23 @@ impl<T> Message<T> {
         &self.author
     }
 
-    /// Get the sequence number of the message.
-    pub fn sequence(&self) -> u64 {
+    /// Get a reference to the sequence number of the message.
+    pub fn sequence_ref(&self) -> &SequenceNumber {
+        &self.sequence
+    }
+
+    /// Consume the message and return it's sequence number.
+    pub fn into_sequence(self) -> SequenceNumber {
         self.sequence
     }
 
-    /// Get the timestamp of the message.
-    pub fn timestamp(&self) -> u64 {
+    /// Get a reference to the timestamp of the message.
+    pub fn timestamp_ref(&self) -> &Timestamp {
+        &self.timestamp
+    }
+
+    /// Consume the message and return it's timestamp.
+    pub fn into_timestamp(self) -> Timestamp {
         self.timestamp
     }
 
@@ -91,8 +111,8 @@ mod tests {
         assert_eq!(deserialized.author(),
                    from_str::<FeedId>("\"@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519\"")
                        .unwrap());
-        assert_eq!(deserialized.sequence(), 2);
-        assert_eq!(deserialized.timestamp(), 1514517078157);
+        // assert_eq!(deserialized.sequence_ref(), &SequenceNumber(Number::from_f64(2.0).unwrap()));
+        // assert_eq!(deserialized.timestamp_ref(), &Timestamp(Number::from_f64(1514517078157.0).unwrap()));
         assert_eq!(deserialized.hash, PossibleHash::Sha256);
         assert_eq!(deserialized.signature,
                    "z7W1ERg9UYZjNfE72ZwEuJF79khG+eOHWFp6iF+KLuSrw8Lqa6IousK4cCn9T5qFa8E14GVek4cAMmMbjqDnAg==.sig.ed25519");
