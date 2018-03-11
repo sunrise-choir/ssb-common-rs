@@ -6,6 +6,8 @@ extern crate sodiumoxide;
 extern crate base64;
 extern crate regex;
 extern crate serde;
+#[macro_use(Serialize, Deserialize)]
+extern crate serde_derive;
 extern crate secret_handshake;
 #[macro_use]
 extern crate lazy_static;
@@ -29,3 +31,4 @@ pub mod directory;
 pub mod hashes;
 pub mod keys;
 pub mod links;
+pub mod messages;
