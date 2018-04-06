@@ -94,22 +94,22 @@ mod tests {
 
     #[test]
     fn deserialize_message() {
-        let msg = "{
-  \"previous\": \"%XphMUkWQtomKjXQvFGfsGYpt69sgEY7Y4Vou9cEuJho=.sha256\",
-  \"author\": \"@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519\",
-  \"sequence\": 2,
-  \"timestamp\": 1514517078157,
-  \"hash\": \"sha256\",
-  \"content\": {
-    \"type\": \"post\",
-    \"text\": \"Second post!\"
+        let msg = r#"{
+  "previous": "%XphMUkWQtomKjXQvFGfsGYpt69sgEY7Y4Vou9cEuJho=.sha256",
+  "author": "@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519",
+  "sequence": 2,
+  "timestamp": 1514517078157,
+  "hash": "sha256",
+  "content": {
+    "type": "post",
+    "text": "Second post!"
   },
-  \"signature\": \"z7W1ERg9UYZjNfE72ZwEuJF79khG+eOHWFp6iF+KLuSrw8Lqa6IousK4cCn9T5qFa8E14GVek4cAMmMbjqDnAg==.sig.ed25519\"
-}";
+  "signature": "z7W1ERg9UYZjNfE72ZwEuJF79khG+eOHWFp6iF+KLuSrw8Lqa6IousK4cCn9T5qFa8E14GVek4cAMmMbjqDnAg==.sig.ed25519"
+}"#;
         let deserialized = from_str::<Message<Value>>(msg).unwrap();
-        assert_eq!(deserialized.previous(), Some(from_str::<MessageId>("\"%XphMUkWQtomKjXQvFGfsGYpt69sgEY7Y4Vou9cEuJho=.sha256\"").unwrap()));
+        assert_eq!(deserialized.previous(), Some(from_str::<MessageId>(r#""%XphMUkWQtomKjXQvFGfsGYpt69sgEY7Y4Vou9cEuJho=.sha256""#).unwrap()));
         assert_eq!(deserialized.author(),
-                   from_str::<FeedId>("\"@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519\"")
+                   from_str::<FeedId>(r#""@FCX/tsDLpubCPKKfIrw4gc+SQkHcaD17s7GI6i/ziWY=.ed25519""#)
                        .unwrap());
         // assert_eq!(deserialized.sequence_ref(), &SequenceNumber(Number::from_f64(2.0).unwrap()));
         // assert_eq!(deserialized.timestamp_ref(), &Timestamp(Number::from_f64(1514517078157.0).unwrap()));
@@ -117,10 +117,10 @@ mod tests {
         assert_eq!(deserialized.signature,
                    "z7W1ERg9UYZjNfE72ZwEuJF79khG+eOHWFp6iF+KLuSrw8Lqa6IousK4cCn9T5qFa8E14GVek4cAMmMbjqDnAg==.sig.ed25519");
         assert_eq!(deserialized.content_ref(),
-                   &from_str::<Value>("{
-            \"type\": \"post\",
-            \"text\": \"Second post!\"
-        }")
+                   &from_str::<Value>(r#"{
+            "type": "post",
+            "text": "Second post!"
+        }"#)
                             .unwrap());
     }
 }
