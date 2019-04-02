@@ -3,6 +3,7 @@
 
 extern crate sodiumoxide;
 extern crate base64;
+extern crate dirs;
 extern crate regex;
 extern crate serde;
 #[macro_use(Serialize, Deserialize)]

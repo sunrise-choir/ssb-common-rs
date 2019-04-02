@@ -1,7 +1,7 @@
 //! Helpers for working with the default directory (layout) of ssb.
 
 use std::path::PathBuf;
-use std::env::{home_dir, var_os};
+use std::env::var_os;
 use std::ffi::{OsStr, OsString};
 
 /// The name of the directory where ssb stores its data by default.
@@ -21,14 +21,17 @@ pub const ENV_SSB_DIRECTORY_NAME: &'static str = "ssb_appname";
 /// This function checks the `ENV_SSB_DIRECTORY_NAME` environment variable to
 /// override the default directory if it is set.
 ///
-/// Returns `None` if `std::env::home_dir` returns `None`.
+/// Returns `None` if `dirs::home_dir` returns `None`.
 pub fn ssb_directory() -> Option<PathBuf> {
-    let mut dirname = OsString::from(".");
-    dirname.push(var_os(OsStr::new(ENV_SSB_DIRECTORY_NAME))
-                     .unwrap_or(OsString::from(DEFAULT_SSB_DIRECTORY_NAME)));
+    ssb_directory_with_name(&var_os(OsStr::new(ENV_SSB_DIRECTORY_NAME))
+                            .unwrap_or(OsString::from(DEFAULT_SSB_DIRECTORY_NAME)))
+}
 
-    home_dir().map(|mut home| {
-                       home.push(dirname);
-                       home
-                   })
+fn ssb_directory_with_name(name: &OsStr) -> Option<PathBuf> {
+    let mut dirname = OsString::from(".");
+    dirname.push(OsString::from(name));
+
+    let mut dir = dirs::home_dir()?;
+    dir.push(dirname);
+    Some(dir)
 }
