@@ -86,11 +86,9 @@ enum PossibleHash {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{to_string, from_str, Value};
+    use serde_json::{from_str, Value};
 
     use super::*;
-    use keys::gen_keypair;
-    use hashes::hash;
 
     #[test]
     fn deserialize_message() {
