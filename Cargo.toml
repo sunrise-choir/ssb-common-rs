@@ -3,9 +3,9 @@ name = "ssb-common"
 version = "0.3.0"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Common types and data among various ssb modules."
-repository = "https://github.com/ssbc/ssb-common-rs"
+repository = "https://github.com/sunrise-choir/ssb-common-rs"
 readme = "README.md"
-license = "AGPL-3.0"
+license = "LGPL-3.0"
 
 [dependencies]
 dirs = "1.0"
